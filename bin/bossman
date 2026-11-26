@@ -1,0 +1,78 @@
+#!/bin/sh
+# bossman: runs the leader agent on a prompt and resumes it after failures.
+#
+#   bossman init          add the agents and opencode.jsonc to this repo
+#   bossman "<prompt>"    build it
+#
+# Set BOSSMAN_NOTIFY to a command that takes one message, to hear when a run
+# ends. For example a script that sends it to your phone.
+
+set -u
+here=$(dirname "$(realpath "$0")")
+PATH="$here:$PATH"; export PATH
+max_restarts=5
+
+say() { printf 'bossman: %s\n' "$1"; }
+notify() {
+  say "$1"
+  if [ -n "${BOSSMAN_NOTIFY:-}" ]; then "$BOSSMAN_NOTIFY" "$1" || true; fi
+}
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || { say "run this inside a git repository"; exit 2; }
+cd "$root" || exit 2
+
+if [ "${1:-}" = "init" ]; then
+  mkdir -p .opencode/agents specs
+  for f in opencode.jsonc .opencode/agents/leader.md .opencode/agents/junior.md \
+           .opencode/agents/senior.md .opencode/agents/expert.md .opencode/agents/reviewer.md; do
+    if [ -e "$f" ]; then say "kept your $f"; else cp "$here/../template/$f" "$f"; say "added $f"; fi
+  done
+  grep -qx '.bossman/' .gitignore 2>/dev/null || { echo '.bossman/' >> .gitignore; say "added .bossman/ to .gitignore"; }
+  exit 0
+fi
+
+prompt="${1:-}"
+[ -n "$prompt" ] || { say 'give a prompt, like: bossman "Build a todo app"'; exit 2; }
+[ -f .opencode/agents/leader.md ] || { say "run bossman init first"; exit 2; }
+for v in LITELLM_BASE_URL LITELLM_API_KEY PYO_URL PYO_API_KEY; do
+  eval "val=\${$v:-}"
+  [ -n "$val" ] || { say "$v isn't set. See the README."; exit 2; }
+done
+
+mkdir -p .bossman/logs
+session=""
+tries=0
+while [ $tries -le $max_restarts ]; do
+  log=".bossman/logs/leader-$(date +%Y%m%d-%H%M%S).jsonl"
+  if [ -z "$session" ]; then
+    say "leader is planning"
+    opencode run --standalone --auto --format json --agent leader "$prompt" > "$log"
+  else
+    say "resuming leader (restart $tries of $max_restarts)"
+    opencode run --standalone --auto --format json --agent leader --session "$session" \
+      "Continue from PLAN.md. Skip tasks marked done." > "$log"
+  fi
+  code=$?
+
+  if [ -f PLAN.md ] && tail -n 1 PLAN.md | grep -q 'ALL TASKS DONE'; then
+    notify "done. See PLAN.md for what was built and what failed."
+    exit 0
+  fi
+
+  # Session ids look like ses_4f2a1c. Not confirmed: where run --format json prints it.
+  [ -n "$session" ] || session=$(grep -o 'ses_[A-Za-z0-9]*' "$log" | head -n 1)
+
+  if grep -qi 'budget' "$log"; then
+    notify "stopped: the LiteLLM budget is used up. Raise it, then run the same command again."
+    exit 3
+  fi
+  if grep -qi 'rate limit\|overloaded' "$log"; then
+    say "a provider is rate limiting. Waiting 5 minutes."
+    sleep 300
+  fi
+  [ $code -eq 0 ] || say "leader stopped with exit code $code. Log: $log"
+  tries=$((tries + 1))
+done
+
+notify "stopped after $max_restarts restarts. See PLAN.md and .bossman/logs."
+exit 1
