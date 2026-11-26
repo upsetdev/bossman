@@ -23,6 +23,7 @@ you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
 4. Uploads the bundle and the spec, then clones the bundle in the sandbox.
 5. Runs the agent with the first runner for its tier in `bossman.jsonc`:
    - `litellm/<alias>`: `opencode run` on that alias, with the repo's `providers.litellm` block
+   - `codex:litellm/<alias>`: `codex exec --json --sandbox danger-full-access`, with a `~/.codex/config.toml` that points at LiteLLM's Responses API
    - `claude:max` or `claude:pro`: `claude -p` with that plan's token. At the plan's usage limit, it tries the next runner.
 6. Commits anything left uncommitted, then runs the test command if one was given.
 7. Reads the new commits back with `git format-patch` and applies them to the worktree with `git am`.
@@ -39,4 +40,7 @@ Check each of these against a real sandbox server before relying on it:
 - That `claude -p --permission-mode bypassPermissions` runs as root in a sandbox. `worker` sets `IS_SANDBOX=1` for it.
 - `@pyodev/sandbox` 0.4.0 on npm needs `template` and has no `name` option. The SDK's source has moved on since that release. Recheck after the next release.
 - That `opencode run --standalone`, which `bossman` uses, can see a ChatGPT sign-in saved by the normal OpenCode service.
+- That Codex accepts the generated `~/.codex/config.toml`. Codex wasn't installed where this was written.
+- That LiteLLM's `/v1/responses` works for each alias Codex uses, including aliases that map to non-OpenAI models.
+- How Codex handles a model name it doesn't know, like `premium`. It may warn or pick wrong defaults for context size.
 - That sandbox traffic leaves through the sandbox server's public address, so a LiteLLM firewall rule can allow only that address.
