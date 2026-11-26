@@ -32,3 +32,9 @@
 - No tester agent. Running tests is a command, not a judgment, so `worker` runs them instead of a model.
 - `worker check` runs the full test suite on the merged code after each merge. `leader` merges with `--no-ff`, so a failed check can be undone with `git revert -m 1`.
 - For important code, `leader` makes a separate task that writes the tests first, on a different tier from the code task.
+
+### Releases
+
+- No release yet. The first one comes after every runner has been tested in a real sandbox.
+- When it comes: install from npm as `@upsetdev/bossman`, published from GitHub Actions with provenance. GitHub Releases hold the tags and release notes. No prebuilt binaries for now.
+- Order: `0.1.0-rc.1` under npm's `next` tag, installed on a throwaway machine first, then `0.1.0`.
