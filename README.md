@@ -2,7 +2,7 @@
 
 # bossman
 
-Splits coding work across models by difficulty. You give one prompt. The `leader` agent plans the work and hands each task to `junior`, `senior` or `expert`. Each task runs in its own [Pyo sandbox](https://pyo.dev/docs/sandbox).
+Splits coding work across models by difficulty. You give one prompt. The `leader` agent plans the work and hands each task to `junior`, `senior` or `expert`. Each task runs in its own [Pyo Sandbox](https://pyo.dev/docs/sandbox).
 
 | Agent | Runs on | Does |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-// bossman task and bossman check: run one task, or the full tests, in a fresh Pyo sandbox.
+// bossman task and bossman check: run one task, or the full tests, in a fresh Pyo Sandbox.
 //
 //   bossman task --tier junior|senior|expert --task 3 --spec specs/3.md [--test "bun test"]
 //   bossman check [--ref <commit>] [--test <cmd>]
