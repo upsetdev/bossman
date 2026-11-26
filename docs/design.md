@@ -10,8 +10,19 @@ you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
                                 │                                  agent works, tests run
                                 │      ◄── commits on task/<id> ───┘
                                 ├─► reviewer reads the task branch
-                                └─ merges task branches in PLAN.md order
+                                ├─ merges task/<id> with --no-ff, in PLAN.md order
+                                └─ worker check ──► fresh Pyo sandbox, full test suite
+                                       fail: git revert -m 1, and a new senior task
 ```
+
+## After a merge
+
+`worker check` runs the full test command on one commit:
+
+1. Points a private ref, `refs/bossman/check`, at the commit and bundles it. The ref is deleted right away.
+2. Creates a sandbox with no env. No agent runs, so it gets no keys.
+3. Fetches the ref from the bundle and checks out the commit. `git clone` would skip a ref outside branches and tags.
+4. Runs the test command and prints a JSON report with `pass` or `fail`.
 
 ## One task
 

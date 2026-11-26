@@ -26,3 +26,9 @@
 
 - Codex runs as `codex:litellm/<alias>`: on your LiteLLM key, never on a ChatGPT sign-in. OpenAI asks for API keys for scripted Codex use.
 - Codex runs with `--sandbox danger-full-access` and `approval_policy = "never"`. The Pyo sandbox is the isolation, as OpenAI's docs suggest for an isolated runner.
+
+### Tests after merging
+
+- No tester agent. Running tests is a command, not a judgment, so `worker` runs them instead of a model.
+- `worker check` runs the full test suite on the merged code after each merge. `leader` merges with `--no-ff`, so a failed check can be undone with `git revert -m 1`.
+- For important code, `leader` makes a separate task that writes the tests first, on a different tier from the code task.
