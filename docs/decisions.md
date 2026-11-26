@@ -42,3 +42,8 @@
 ### Pro in the default order
 
 - 2026-11-26: the default order for `expert` is Max, then Pro, then `litellm/premium`. Users can set another order in `tiers.expert`. This replaces "Pro is opt-in". A plan whose token isn't set is skipped, so users without a Pro token get Max, then `litellm/premium`.
+
+### One command
+
+- 2026-11-26: bossman has one command. `worker run` is now `bossman task`, `worker check` is now `bossman check`, and `bin/worker` is removed without an alias, since there's no release yet.
+- `leader` may run only `bossman check`, never `bossman` in general, so it can't start another `leader`. Each worker agent may run only `bossman task` for its own tier.

@@ -9,7 +9,7 @@
   //
   // leader and reviewer run on your machine. Set their models in
   // .opencode/agents/leader.md and reviewer.md.
-  // The full test command. worker check runs it on the merged code after each
+  // The full test command. bossman check runs it on the merged code after each
   // merge, and workers run it when a task's spec doesn't name one.
   // "test": "bun install && bun test",
 

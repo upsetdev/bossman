@@ -1,6 +1,9 @@
-// worker: runs one bossman task in a fresh Pyo sandbox and brings the commits back.
+// bossman task and bossman check: run one task, or the full tests, in a fresh Pyo sandbox.
 //
-//   worker run --tier junior|senior|expert --task 3 --spec specs/3.md [--test "bun test"]
+//   bossman task --tier junior|senior|expert --task 3 --spec specs/3.md [--test "bun test"]
+//   bossman check [--ref <commit>] [--test <cmd>]
+//
+// bin/bossman starts this file. It isn't meant to be run on its own.
 //
 // Which runners a tier tries, and in what order, comes from bossman.jsonc in the repo.
 
@@ -58,7 +61,7 @@ When you're done, run the spec's test command, then commit your work with git.
 `;
 
 function fail(msg: string): never {
-  console.error(`worker: ${msg}`);
+  console.error(`bossman: ${msg}`);
   process.exit(2);
 }
 
@@ -497,13 +500,12 @@ async function check(argv: string[]) {
   process.exit(report.tests === "pass" ? 0 : 1);
 }
 
-const USAGE =
-  "Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>], or worker check [--ref <commit>] [--test <cmd>]";
+const USAGE = "See bossman help.";
 const [cmd, ...rest] = process.argv.slice(2);
 const sandboxError = (what: string) => (e: unknown) => {
   const msg = e instanceof Error ? e.message : String(e);
   fail(`couldn't ${what}: ${msg}. Check PYO_URL, PYO_API_KEY and that a sandbox server is up.`);
 };
-if (cmd === "run") await run(rest).catch(sandboxError("run the task"));
+if (cmd === "task") await run(rest).catch(sandboxError("run the task"));
 else if (cmd === "check") await check(rest).catch(sandboxError("run the check"));
 else fail(`unknown command "${cmd ?? ""}". ${USAGE}`);

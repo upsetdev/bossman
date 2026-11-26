@@ -37,7 +37,7 @@ Then add `~/bossman/bin` to your `PATH`. Put this line in `~/.bashrc` or `~/.zsh
 export PATH="$HOME/bossman/bin:$PATH"
 ```
 
-`command -v bossman worker` should print both paths.
+`bossman help` should list the commands.
 
 ### Update
 
@@ -74,6 +74,17 @@ bossman "Build a todo app with a REST API and a React frontend"
 
 `bossman` runs `leader`, and resumes it if a run fails, up to 5 times. Progress is kept in `PLAN.md` and on the task branches, so a stopped run can pick up again.
 
+### Commands
+
+| Command | What it does |
+| --- | --- |
+| `bossman init` | Adds the agents, `opencode.jsonc` and `bossman.jsonc` to the repo. Keeps files you already have |
+| `bossman "<prompt>"` | Runs `leader` on the prompt |
+| `bossman run "<prompt>"` | The same. Use it when the prompt starts with a command name, like `bossman run "check the login flow"` |
+| `bossman task …` | Runs one task in a fresh sandbox. The worker agents run this, so you only need it to redo a task |
+| `bossman check …` | Runs the full test command on a commit in a fresh sandbox. `leader` runs it after each merge |
+| `bossman help` | Lists the commands and their options |
+
 ### Files bossman makes
 
 `leader` splits the work into numbered tasks. For task 3, that's:
@@ -82,7 +93,7 @@ bossman "Build a todo app with a REST API and a React frontend"
 | --- | --- |
 | `PLAN.md` | Every task with its number, tier, dependencies and status: todo, doing, done or failed |
 | `specs/3.md` | The task's instructions: the goal, the files to change and the test command. The worker gets nothing else |
-| `task/3` | The git branch the task's commits come back on. `leader` merges it after review and `worker check` pass |
+| `task/3` | The git branch the task's commits come back on. `leader` merges it after review and `bossman check` pass |
 | `.bossman/` | Worktrees, logs, bundles and patches. It's in `.gitignore` |
 
 For example, `PLAN.md` might hold:
@@ -96,7 +107,7 @@ For example, `PLAN.md` might hold:
 `leader` normally runs each task for you. To run one by hand, for example task 3:
 
 ```sh
-worker run --tier senior --task 3 --spec specs/3.md --test "bun test"
+bossman task --tier senior --task 3 --spec specs/3.md --test "bun test"
 ```
 
 ## Tests
@@ -111,17 +122,17 @@ Tests are checked at three points:
 
 | When | Who | What |
 | --- | --- | --- |
-| After each task | `worker run` | Runs the spec's test command in the task's sandbox. Falls back to `test` from `bossman.jsonc` |
+| After each task | `bossman task` | Runs the spec's test command in the task's sandbox. Falls back to `test` from `bossman.jsonc` |
 | After each task | `reviewer` | Reads the task's diff against its spec. It doesn't run anything |
-| After each merge | `worker check` | Runs `test` on the merged code in a fresh sandbox, with no agent and no keys. If it fails, `leader` reverts the merge and adds a task to fix it |
+| After each merge | `bossman check` | Runs `test` on the merged code in a fresh sandbox, with no agent and no keys. If it fails, `leader` reverts the merge and adds a task to fix it |
 
 For important code, `leader` first adds a task that writes the tests, on a different tier from the code task. Then one agent doesn't write both the code and the tests that grade it.
 
 To check a commit by hand:
 
 ```sh
-worker check                 # HEAD
-worker check --ref main --test "pnpm test"
+bossman check                # HEAD
+bossman check --ref main --test "pnpm test"
 ```
 
 ## Models and providers
@@ -149,7 +160,7 @@ Add `"compatibility": { "cacheFormat": "anthropic" }` to each alias that maps to
 | `claude:max` | Claude Code on your Max plan. Skipped when `BOSSMAN_CLAUDE_MAX_TOKEN` isn't set |
 | `claude:pro` | Claude Code on your Pro plan. Skipped when `BOSSMAN_CLAUDE_PRO_TOKEN` isn't set |
 
-`worker` moves to the next runner when a Claude plan is at its usage limit. Without a `bossman.jsonc`, it uses the tiers above.
+`bossman task` moves to the next runner when a Claude plan is at its usage limit. Without a `bossman.jsonc`, it uses the tiers above.
 
 **leader and reviewer** run on your machine. Set their models in `.opencode/agents/leader.md` and `reviewer.md`. Run `reviewer` on a different provider from the workers, so a second model family checks the code.
 
