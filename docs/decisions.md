@@ -47,3 +47,7 @@
 
 - 2026-11-26: bossman has one command. `worker run` is now `bossman task`, `worker check` is now `bossman check`, and `bin/worker` is removed without an alias, since there's no release yet.
 - `leader` may run only `bossman check`, never `bossman` in general, so it can't start another `leader`. Each worker agent may run only `bossman task` for its own tier.
+
+### Sandbox sizes
+
+- 2026-11-26: sandbox sizes can be set per tier and for `bossman check` under `sizes` in `bossman.jsonc`. Unset values keep the defaults: 2 CPUs and 4 GiB for junior, senior and check, 4 CPUs and 8 GiB for expert. This lets bossman run on a small sandbox server, like a VM on a laptop.

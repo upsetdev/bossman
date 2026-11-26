@@ -14,6 +14,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { codexConfig } from "./codex";
 import { parseJsonc } from "./jsonc";
+import { resolveSizes, type Size, type SizeName } from "./sizes";
 
 type Tier = "junior" | "senior" | "expert";
 const TIERS: Tier[] = ["junior", "senior", "expert"];
@@ -44,11 +45,6 @@ interface Report {
   note?: string;
 }
 
-const SIZE: Record<Tier, { cpus: number; memoryMib: number; diskMib: number }> = {
-  junior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
-  senior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
-  expert: { cpus: 4, memoryMib: 8192, diskMib: 16384 },
-};
 const AGENT_TIMEOUT_MS = 45 * 60_000;
 const TEST_TIMEOUT_MS = 15 * 60_000;
 const LOCK_WAIT_MS = 10 * 60_000;
@@ -134,6 +130,7 @@ function litellmProvider(root: string): LitellmProvider {
 interface BossmanConfig {
   tiers?: Partial<Record<Tier, unknown>>;
   test?: unknown;
+  sizes?: unknown;
 }
 
 // bossman.jsonc, or an empty config when the repo has none.
@@ -148,6 +145,13 @@ function configTest(root: string): string | undefined {
   if (t === undefined || t === "") return undefined;
   if (typeof t !== "string") fail(`test in bossman.jsonc must be a command, like "bun install && bun test".`);
   return t;
+}
+
+// The sandbox size for a tier or for bossman check, from bossman.jsonc or the defaults.
+function configSize(root: string, name: SizeName): Size {
+  const sizes = resolveSizes(bossmanConfig(root).sizes);
+  if (typeof sizes === "string") fail(sizes);
+  return sizes[name];
 }
 
 // Tiers from bossman.jsonc, or the defaults when the repo has none.
@@ -231,6 +235,7 @@ interface Job {
   logPath: string;
   patchDir: string;
   provider: LitellmProvider;
+  size: Size;
 }
 
 async function runOnce(job: Job, runner: Runner): Promise<Report> {
@@ -259,7 +264,7 @@ async function runOnce(job: Job, runner: Runner): Promise<Report> {
   const sbx = await Sandbox.create({
     template: "base",
     ttl: "2h",
-    ...SIZE[job.tier],
+    ...job.size,
     env,
     labels: { app: "bossman", task: job.task, tier: job.tier },
   });
@@ -369,6 +374,7 @@ async function run(argv: string[]) {
   const root = git(["rev-parse", "--show-toplevel"], process.cwd());
   const provider = litellmProvider(root);
   const list = tierRunners(root, tier, Object.keys(provider.models!));
+  const size = configSize(root, tier);
   const state = join(root, ".bossman");
   for (const d of ["worktrees", "logs", "bundles", "patches"]) mkdirSync(join(state, d), { recursive: true });
 
@@ -397,6 +403,7 @@ async function run(argv: string[]) {
     logPath: join(state, "logs", `${task}.log`),
     patchDir: join(state, "patches"),
     provider,
+    size,
   };
 
   let report: Report | undefined;
@@ -472,7 +479,7 @@ async function check(argv: string[]) {
   const sbx = await Sandbox.create({
     template: "base",
     ttl: "1h",
-    ...SIZE.senior,
+    ...configSize(root, "check"),
     labels: { app: "bossman", task: "check" },
   });
   log(`sandbox ${sbx.id}`);

@@ -13,6 +13,10 @@
   // merge, and workers run it when a task's spec doesn't name one.
   // "test": "bun install && bun test",
 
+  // Sandbox sizes. Set only what you want to change. The defaults are 2 CPUs and
+  // 4 GiB for junior, senior and check, and 4 CPUs and 8 GiB for expert.
+  // "sizes": { "expert": { "cpus": 2, "memoryMib": 2048 } },
+
   "tiers": {
     "junior": ["litellm/fast"],
     "senior": ["litellm/balanced"],
