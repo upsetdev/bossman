@@ -5,7 +5,7 @@
 - The project is named `bossman`. The repo, the command and the scoped npm package (`@upsetdev/bossman`) use it. The unscoped npm name is taken.
 - Agents are named `leader`, `junior`, `senior`, `expert` and `reviewer`. Not "Chief of Staff" or "lead".
 - `leader` runs on a strong model (`litellm/premium`). It plans and hands out work, and is not allowed to edit code. A weak leader makes bad plans, and that costs more than it saves.
-- `leader` runs on your own machine. Each task runs in its own fresh Pyo sandbox.
+- `leader` runs on your own machine. Each task runs in its own fresh Pyo Sandbox.
 - Code goes into and out of a sandbox as a git bundle and a patch. Sandboxes never get a GitHub token.
 - Claude plans are used only through the unmodified `claude` binary, with a `claude setup-token` token. Never through an OpenCode plugin or LiteLLM.
 - One Claude task per account at a time.
@@ -25,7 +25,7 @@
 ### Codex runner
 
 - Codex runs as `codex:litellm/<alias>`: on your LiteLLM key, never on a ChatGPT sign-in. OpenAI asks for API keys for scripted Codex use.
-- Codex runs with `--sandbox danger-full-access` and `approval_policy = "never"`. The Pyo sandbox is the isolation, as OpenAI's docs suggest for an isolated runner.
+- Codex runs with `--sandbox danger-full-access` and `approval_policy = "never"`. The Pyo Sandbox is the isolation, as OpenAI's docs suggest for an isolated runner.
 
 ### Tests after merging
 

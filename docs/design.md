@@ -6,12 +6,12 @@
 you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
                                 │ writes PLAN.md and specs/<id>.md
                                 ├─► junior / senior / expert  (thin subagents on litellm/fast)
-                                │      └─ bossman task --tier … ──► fresh Pyo sandbox
+                                │      └─ bossman task --tier … ──► fresh Pyo Sandbox
                                 │                                    agent works, tests run
                                 │      ◄── commits on task/<id> ─────┘
                                 ├─► reviewer reads the task branch
                                 ├─ merges task/<id> with --no-ff, in PLAN.md order
-                                └─ bossman check ──► fresh Pyo sandbox, full test suite
+                                └─ bossman check ──► fresh Pyo Sandbox, full test suite
                                        fail: git revert -m 1, and a new senior task
 ```
 
