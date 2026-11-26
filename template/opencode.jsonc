@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "leader",
+  "providers": {
+    "litellm": {
+      "name": "LiteLLM",
+      "env": ["LITELLM_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "${LITELLM_BASE_URL}/v1" },
+      "models": {
+        // Keep cacheFormat "anthropic" only on aliases that map to Claude models.
+        "fast": { "name": "fast", "compatibility": { "cacheFormat": "anthropic" } },
+        "balanced": { "name": "balanced", "compatibility": { "cacheFormat": "anthropic" } },
+        "premium": { "name": "premium", "compatibility": { "cacheFormat": "anthropic" } }
+      }
+    }
+  },
+  "agents": {
+    "explore": { "model": "litellm/fast" }
+  }
+}
