@@ -2,14 +2,17 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "leader",
   "providers": {
+    // Your LiteLLM aliases. bossman's sandboxes use this same block.
     "litellm": {
       "name": "LiteLLM",
       "env": ["LITELLM_API_KEY"],
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": { "baseURL": "${LITELLM_BASE_URL}/v1" },
       "models": {
-        // Keep cacheFormat "anthropic" only on aliases that map to Claude models.
-        "fast": { "name": "fast", "compatibility": { "cacheFormat": "anthropic" } },
+        // Add "compatibility": { "cacheFormat": "anthropic" } to each alias that maps
+        // to a Claude model, so Claude's prompt cache works through LiteLLM.
+        // Leave it off for other providers. They cache on their own.
+        "fast": { "name": "fast" },
         "balanced": { "name": "balanced", "compatibility": { "cacheFormat": "anthropic" } },
         "premium": { "name": "premium", "compatibility": { "cacheFormat": "anthropic" } }
       }
