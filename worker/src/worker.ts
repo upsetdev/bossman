@@ -128,19 +128,34 @@ function litellmProvider(root: string): LitellmProvider {
   return p;
 }
 
+interface BossmanConfig {
+  tiers?: Partial<Record<Tier, unknown>>;
+  test?: unknown;
+}
+
+// bossman.jsonc, or an empty config when the repo has none.
+function bossmanConfig(root: string): BossmanConfig {
+  const path = join(root, "bossman.jsonc");
+  return existsSync(path) ? (readJsonc(path) as BossmanConfig) : {};
+}
+
+// The repo's full test command from bossman.jsonc, if it sets one.
+function configTest(root: string): string | undefined {
+  const t = bossmanConfig(root).test;
+  if (t === undefined || t === "") return undefined;
+  if (typeof t !== "string") fail(`test in bossman.jsonc must be a command, like "bun install && bun test".`);
+  return t;
+}
+
 // Tiers from bossman.jsonc, or the defaults when the repo has none.
 function tierRunners(root: string, tier: Tier, aliases: string[]): Runner[] {
-  const path = join(root, "bossman.jsonc");
   let names = DEFAULT_TIERS[tier];
-  if (existsSync(path)) {
-    const cfg = readJsonc(path) as { tiers?: Partial<Record<Tier, unknown>> };
-    const list = cfg.tiers?.[tier];
-    if (list !== undefined) {
-      if (!Array.isArray(list) || list.length === 0 || !list.every((s) => typeof s === "string")) {
-        fail(`tiers.${tier} in bossman.jsonc must be a list of runners, like ["litellm/fast"].`);
-      }
-      names = list as string[];
+  const list = bossmanConfig(root).tiers?.[tier];
+  if (list !== undefined) {
+    if (!Array.isArray(list) || list.length === 0 || !list.every((s) => typeof s === "string")) {
+      fail(`tiers.${tier} in bossman.jsonc must be a list of runners, like ["litellm/fast"].`);
     }
+    names = list as string[];
   }
 
   const out: Runner[] = [];
@@ -375,7 +390,7 @@ async function run(argv: string[]) {
     worktree,
     bundle,
     spec: readFileSync(resolve(root, specPath), "utf8"),
-    test: values.test,
+    test: values.test ?? configTest(root),
     logPath: join(state, "logs", `${task}.log`),
     patchDir: join(state, "patches"),
     provider,
@@ -401,10 +416,94 @@ async function run(argv: string[]) {
   process.exit(report.outcome === "done" ? 0 : 1);
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
-if (cmd === "run") {
-  await run(rest).catch((e: unknown) => {
-    const msg = e instanceof Error ? e.message : String(e);
-    fail(`couldn't run the task: ${msg}. Check PYO_URL, PYO_API_KEY and that a sandbox server is up.`);
+interface CheckReport {
+  ref: string;
+  commit: string;
+  tests: "pass" | "fail";
+  exitCode: number | null;
+  log: string;
+  note?: string;
+}
+
+// Runs the full test command on a commit, in a fresh sandbox with no agent and no keys.
+// leader runs it after each merge, so tasks that pass alone but break together are caught.
+async function check(argv: string[]) {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      ref: { type: "string", default: "HEAD" },
+      test: { type: "string" },
+    },
   });
-} else fail(`unknown command "${cmd ?? ""}". Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>]`);
+  need("PYO_URL");
+  need("PYO_API_KEY");
+
+  const root = git(["rev-parse", "--show-toplevel"], process.cwd());
+  const test = values.test ?? configTest(root);
+  if (!test) fail(`no test command. Set "test" in bossman.jsonc, or pass --test.`);
+  const ref = values.ref!;
+  if (!gitOk(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], root)) fail(`"${ref}" isn't a commit in this repo.`);
+  const commit = git(["rev-parse", `${ref}^{commit}`], root);
+
+  const state = join(root, ".bossman");
+  for (const d of ["logs", "bundles"]) mkdirSync(join(state, d), { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const logPath = join(state, "logs", `check-${stamp}.log`);
+  const log = (line: string) => appendFileSync(logPath, line.endsWith("\n") ? line : line + "\n");
+
+  // A bundle needs a ref, so point a private one at the commit for a moment.
+  const tmpRef = "refs/bossman/check";
+  const bundle = join(state, "bundles", "check.bundle");
+  git(["update-ref", tmpRef, commit], root);
+  try {
+    git(["bundle", "create", "-q", bundle, tmpRef], root);
+  } finally {
+    gitOk(["update-ref", "-d", tmpRef], root);
+  }
+  if (statSync(bundle).size > MAX_UPLOAD) {
+    fail(`the repo is over 64 MiB as a git bundle, which is more than a sandbox upload takes.`);
+  }
+
+  log(`== ${new Date().toISOString()} check ${ref} at ${commit}: ${test}`);
+  const report: CheckReport = { ref, commit, tests: "fail", exitCode: null, log: logPath };
+  const sbx = await Sandbox.create({
+    template: "base",
+    ttl: "1h",
+    ...SIZE.senior,
+    labels: { app: "bossman", task: "check" },
+  });
+  log(`sandbox ${sbx.id}`);
+  try {
+    await sbx.files.write("/root/check.bundle", readFileSync(bundle));
+    const setup = await sbx.exec(
+      // clone would skip the private ref, so fetch it by name.
+      `mkdir -p /root/repo && cd /root/repo && git init -q && ` +
+        `git fetch -q /root/check.bundle ${tmpRef} && git checkout -q --detach ${commit}`,
+      { timeoutMs: 120_000 },
+    );
+    if (setup.exitCode !== 0) {
+      report.note = `couldn't unpack the repo in the sandbox: ${setup.stderr.trim().slice(-300)}`;
+    } else {
+      const t = await sbx.exec(`cd /root/repo && ${test}`, { timeoutMs: TEST_TIMEOUT_MS, onStdout: log, onStderr: log });
+      report.exitCode = t.exitCode;
+      report.tests = t.exitCode === 0 && !t.timedOut ? "pass" : "fail";
+      if (t.timedOut) report.note = "the tests ran past their time limit and were stopped";
+    }
+  } finally {
+    await sbx.delete().catch((e) => log(`couldn't delete sandbox ${sbx.id}: ${e}`));
+  }
+
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(report.tests === "pass" ? 0 : 1);
+}
+
+const USAGE =
+  "Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>], or worker check [--ref <commit>] [--test <cmd>]";
+const [cmd, ...rest] = process.argv.slice(2);
+const sandboxError = (what: string) => (e: unknown) => {
+  const msg = e instanceof Error ? e.message : String(e);
+  fail(`couldn't ${what}: ${msg}. Check PYO_URL, PYO_API_KEY and that a sandbox server is up.`);
+};
+if (cmd === "run") await run(rest).catch(sandboxError("run the task"));
+else if (cmd === "check") await check(rest).catch(sandboxError("run the check"));
+else fail(`unknown command "${cmd ?? ""}". ${USAGE}`);
