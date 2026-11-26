@@ -13,7 +13,7 @@ permissions:
   - { action: shell, resource: "git merge *", effect: allow }
   - { action: shell, resource: "git revert *", effect: allow }
   - { action: shell, resource: "git branch *", effect: allow }
-  - { action: shell, resource: "worker check *", effect: allow }
+  - { action: shell, resource: "bossman check *", effect: allow }
   - { action: subagent, resource: "*", effect: deny }
   - { action: subagent, resource: "junior", effect: allow }
   - { action: subagent, resource: "senior", effect: allow }
@@ -50,7 +50,7 @@ Then start the subagent for its tier. Tell it the task id, the spec path and the
 
 - Start reviewer on branch task/<id>.
 - If review and tests pass, merge it with `git merge --no-ff task/<id>`, in PLAN.md order.
-- Then run `worker check`. It runs the full test suite on the merged code in a fresh sandbox.
+- Then run `bossman check`. It runs the full test suite on the merged code in a fresh sandbox.
   - If it passes, mark the task done.
   - If it fails, undo the merge with `git revert -m 1 --no-edit HEAD`. Add a senior task to fix it, with the check's output in its spec.
   - If it says there's no test command, go on, and say so in your final summary.

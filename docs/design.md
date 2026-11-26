@@ -6,18 +6,18 @@
 you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
                                 │ writes PLAN.md and specs/<id>.md
                                 ├─► junior / senior / expert  (thin subagents on litellm/fast)
-                                │      └─ worker run --tier … ──► fresh Pyo sandbox
-                                │                                  agent works, tests run
-                                │      ◄── commits on task/<id> ───┘
+                                │      └─ bossman task --tier … ──► fresh Pyo sandbox
+                                │                                    agent works, tests run
+                                │      ◄── commits on task/<id> ─────┘
                                 ├─► reviewer reads the task branch
                                 ├─ merges task/<id> with --no-ff, in PLAN.md order
-                                └─ worker check ──► fresh Pyo sandbox, full test suite
+                                └─ bossman check ──► fresh Pyo sandbox, full test suite
                                        fail: git revert -m 1, and a new senior task
 ```
 
 ## After a merge
 
-`worker check` runs the full test command on one commit:
+`bossman check` runs the full test command on one commit:
 
 1. Points a private ref, `refs/bossman/check`, at the commit and bundles it. The ref is deleted right away.
 2. Creates a sandbox with no env. No agent runs, so it gets no keys.
@@ -26,7 +26,7 @@ you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
 
 ## One task
 
-`worker run` does this:
+`bossman task` does this:
 
 1. Makes a git worktree at `.bossman/worktrees/<id>` on a new branch `task/<id>`.
 2. Bundles that branch with `git bundle`.
@@ -44,11 +44,11 @@ you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
 
 Check each of these against a real sandbox server before relying on it:
 
-- How `claude -p` reports a usage limit. `worker` looks for "usage limit" or "rate limit" in its output.
+- How `claude -p` reports a usage limit. `bossman task` looks for "usage limit" or "rate limit" in its output.
 - The exit code `opencode run` returns when a run fails, and the JSON field that holds the session id. `bossman` reads both.
 - Whether `opencode run --standalone --session <id>` can resume a session made by an earlier standalone run.
 - Whether OpenCode fills in `${LITELLM_BASE_URL}` inside `baseURL`. Its docs mention `${NAME}` placeholders there.
-- That `claude -p --permission-mode bypassPermissions` runs as root in a sandbox. `worker` sets `IS_SANDBOX=1` for it.
+- That `claude -p --permission-mode bypassPermissions` runs as root in a sandbox. `bossman task` sets `IS_SANDBOX=1` for it.
 - `@pyodev/sandbox` 0.4.0 on npm needs `template` and has no `name` option. The SDK's source has moved on since that release. Recheck after the next release.
 - That `opencode run --standalone`, which `bossman` uses, can see a ChatGPT sign-in saved by the normal OpenCode service.
 - That Codex accepts the generated `~/.codex/config.toml`. Codex wasn't installed where this was written.
