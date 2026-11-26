@@ -9,7 +9,7 @@ Splits coding work across models by difficulty. You give one prompt. The `leader
 | `leader` | `litellm/premium` | Writes `PLAN.md` and task specs, picks a tier per task, merges branches |
 | `junior` | `litellm/fast` | Small, clear tasks: boilerplate, config, CRUD, docs |
 | `senior` | `litellm/balanced` | Features across files, debugging, merge conflicts |
-| `expert` | Claude Code on your Max plan, else `litellm/premium` | Hard tasks, or a task that failed twice |
+| `expert` | Claude Code on your Max plan, then your Pro plan, then `litellm/premium` | Hard tasks, or a task that failed twice |
 | `reviewer` | `litellm/balanced` | Read-only check of each finished task |
 
 `leader` and `reviewer` run on your machine. Every task runs in a fresh sandbox, and the result comes back as commits on a `task/<id>` branch.
@@ -60,7 +60,7 @@ Set these in your shell. Read the secrets from your password manager. Never put 
 | `PYO_API_KEY` | A Pyo API key with **Sandboxes** access |
 | `PYO_TEAM` | Your team's id, if the key has more than one team |
 | `BOSSMAN_CLAUDE_MAX_TOKEN` | Optional. `claude setup-token` output for your Max account |
-| `BOSSMAN_CLAUDE_PRO_TOKEN` | Optional. Only used when `bossman.jsonc` lists `claude:pro` |
+| `BOSSMAN_CLAUDE_PRO_TOKEN` | Optional. `claude setup-token` output for your Pro account. `expert` uses it when Max is at its limit |
 | `BOSSMAN_NOTIFY` | Optional. A command that takes one message, run when `bossman` finishes or stops |
 
 ## Use
@@ -118,7 +118,7 @@ Add `"compatibility": { "cacheFormat": "anthropic" }` to each alias that maps to
   "tiers": {
     "junior": ["litellm/fast"],
     "senior": ["litellm/balanced"],
-    "expert": ["claude:max", "litellm/premium"]
+    "expert": ["claude:max", "claude:pro", "litellm/premium"]
   }
 }
 ```
@@ -152,7 +152,7 @@ Good to know:
 
 `expert` runs the unmodified `claude` binary with your own token. It runs one task per account at a time. Your token is passed only to the sandbox running that task. Anthropic's terms allow this for your own personal use. They don't allow routing plan credentials through other tools or sharing an account. See [Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance).
 
-The default tiers use only your Max plan. When Max is at its usage limit, `expert` uses `litellm/premium`. To fall back to your Pro plan first, add `claude:pro` to `tiers.expert` yourself. Locks in `~/.bossman/locks` keep it to one task per account across all your repos.
+By default, `expert` tries your Max plan, then your Pro plan, then `litellm/premium`. It moves on when a plan is at its usage limit, or when that plan's token isn't set. To use another order, set `tiers.expert` in `bossman.jsonc`. For example, leave out `claude:pro` to keep Pro for your own use. Locks in `~/.bossman/locks` keep it to one task per account across all your repos.
 
 ## Status
 

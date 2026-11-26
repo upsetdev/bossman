@@ -38,3 +38,7 @@
 - No release yet. The first one comes after every runner has been tested in a real sandbox.
 - When it comes: install from npm as `@upsetdev/bossman`, published from GitHub Actions with provenance. GitHub Releases hold the tags and release notes. No prebuilt binaries for now.
 - Order: `0.1.0-rc.1` under npm's `next` tag, installed on a throwaway machine first, then `0.1.0`.
+
+### Pro in the default order
+
+- 2026-11-26: the default order for `expert` is Max, then Pro, then `litellm/premium`. Users can set another order in `tiers.expert`. This replaces "Pro is opt-in". A plan whose token isn't set is skipped, so users without a Pro token get Max, then `litellm/premium`.

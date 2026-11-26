@@ -16,6 +16,6 @@
   "tiers": {
     "junior": ["litellm/fast"],
     "senior": ["litellm/balanced"],
-    "expert": ["claude:max", "litellm/premium"]
+    "expert": ["claude:max", "claude:pro", "litellm/premium"]
   }
 }
