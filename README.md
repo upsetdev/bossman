@@ -24,11 +24,29 @@ Splits coding work across models by difficulty. You give one prompt. The `leader
 
 ## Install
 
+There's no npm package or release yet. Install from the repository:
+
 ```sh
-git clone <this repo> ~/bossman
-cd ~/bossman/worker && bun install
+git clone https://github.com/upsetdev/bossman.git ~/bossman
+cd ~/bossman/worker && bun install --frozen-lockfile
+```
+
+Then add `~/bossman/bin` to your `PATH`. Put this line in `~/.bashrc` or `~/.zshrc`, and open a new terminal:
+
+```sh
 export PATH="$HOME/bossman/bin:$PATH"
 ```
+
+`command -v bossman worker` should print both paths.
+
+### Update
+
+```sh
+cd ~/bossman && git pull --ff-only
+cd worker && bun install --frozen-lockfile
+```
+
+In app repos you set up before an update, `bossman init` keeps your existing files. Copy any changed files from `~/bossman/template/` over yours by hand.
 
 ## Configure
 
