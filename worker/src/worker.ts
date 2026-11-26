@@ -1,0 +1,330 @@
+// worker: runs one bossman task in a fresh Pyo sandbox and brings the commits back.
+//
+//   worker run --tier junior|senior|expert --task T3 --spec specs/T3.md [--test "bun test"] [--allow-pro]
+
+import { Sandbox } from "@pyodev/sandbox";
+import { parseArgs } from "node:util";
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
+type Tier = "junior" | "senior" | "expert";
+type Runner =
+  | { kind: "opencode"; model: string }
+  | { kind: "claude"; account: "max" | "pro"; token: string };
+
+type Outcome = "done" | "failed" | "limit";
+
+interface Report {
+  task: string;
+  tier: Tier;
+  ran: string;
+  outcome: Outcome;
+  agentExit: number | null;
+  tests: "pass" | "fail" | "none";
+  commits: number;
+  branch: string;
+  log: string;
+  note?: string;
+}
+
+const MODEL: Record<Tier, string> = {
+  junior: "litellm/fast",
+  senior: "litellm/balanced",
+  expert: "litellm/premium",
+};
+const SIZE: Record<Tier, { cpus: number; memoryMib: number; diskMib: number }> = {
+  junior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
+  senior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
+  expert: { cpus: 4, memoryMib: 8192, diskMib: 16384 },
+};
+const AGENT_TIMEOUT_MS = 45 * 60_000;
+const TEST_TIMEOUT_MS = 15 * 60_000;
+const LOCK_WAIT_MS = 10 * 60_000;
+const MAX_UPLOAD = 64 * 1024 * 1024; // the SDK moves up to 64 MiB per call
+// Not confirmed yet: the exact text claude -p prints at a plan's usage limit.
+const LIMIT_RE = /usage limit|rate limit/i;
+const PROMPT = `Do the task in the spec below. Work in the current directory, which is a git repository.
+When you're done, run the spec's test command, then commit your work with git.
+
+`;
+
+function fail(msg: string): never {
+  console.error(`worker: ${msg}`);
+  process.exit(2);
+}
+
+function need(name: string): string {
+  const v = process.env[name];
+  if (!v) fail(`${name} isn't set. See the README for the variables bossman needs.`);
+  return v;
+}
+
+function git(args: string[], cwd: string): string {
+  const r = Bun.spawnSync(["git", ...args], { cwd, stderr: "pipe" });
+  if (r.exitCode !== 0) fail(`git ${args[0]} failed: ${r.stderr.toString().trim()}`);
+  return r.stdout.toString().trim();
+}
+
+function gitOk(args: string[], cwd: string): boolean {
+  return Bun.spawnSync(["git", ...args], { cwd, stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+}
+
+// One Claude task per account at a time, across every repo on this machine.
+async function lock(account: string): Promise<(() => void) | null> {
+  const dir = join(homedir(), ".bossman", "locks");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `claude-${account}.lock`);
+  const until = Date.now() + LOCK_WAIT_MS;
+  while (Date.now() < until) {
+    try {
+      const fd = openSync(path, "wx");
+      writeFileSync(fd, String(process.pid));
+      closeSync(fd);
+      return () => unlinkSync(path);
+    } catch {
+      const pid = Number(readFileSync(path, "utf8"));
+      try {
+        process.kill(pid, 0);
+      } catch {
+        unlinkSync(path); // its owner is gone
+        continue;
+      }
+      await Bun.sleep(5000);
+    }
+  }
+  return null;
+}
+
+function runners(tier: Tier, allowPro: boolean): Runner[] {
+  if (tier !== "expert") return [{ kind: "opencode", model: MODEL[tier] }];
+  const list: Runner[] = [];
+  const max = process.env.BOSSMAN_CLAUDE_MAX_TOKEN;
+  const pro = process.env.BOSSMAN_CLAUDE_PRO_TOKEN;
+  if (max) list.push({ kind: "claude", account: "max", token: max });
+  if (allowPro && pro) list.push({ kind: "claude", account: "pro", token: pro });
+  list.push({ kind: "opencode", model: MODEL.expert });
+  return list;
+}
+
+function label(r: Runner): string {
+  return r.kind === "claude" ? `claude-${r.account}` : r.model;
+}
+
+function opencodeConfig(): string {
+  const base = need("LITELLM_BASE_URL").replace(/\/+$/, "");
+  return JSON.stringify(
+    {
+      $schema: "https://opencode.ai/config.json",
+      providers: {
+        litellm: {
+          name: "LiteLLM",
+          env: ["LITELLM_API_KEY"],
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: `${base}/v1` },
+          models: {
+            fast: { compatibility: { cacheFormat: "anthropic" } },
+            balanced: { compatibility: { cacheFormat: "anthropic" } },
+            premium: { compatibility: { cacheFormat: "anthropic" } },
+          },
+        },
+      },
+      agents: { explore: { model: "litellm/fast" } },
+    },
+    null,
+    2,
+  );
+}
+
+interface Job {
+  task: string;
+  tier: Tier;
+  branch: string;
+  worktree: string;
+  bundle: string;
+  spec: string;
+  test?: string;
+  logPath: string;
+  patchDir: string;
+}
+
+async function runOnce(job: Job, runner: Runner): Promise<Report> {
+  const log = (line: string) => appendFileSync(job.logPath, line.endsWith("\n") ? line : line + "\n");
+  const report: Report = {
+    task: job.task,
+    tier: job.tier,
+    ran: label(runner),
+    outcome: "failed",
+    agentExit: null,
+    tests: "none",
+    commits: 0,
+    branch: job.branch,
+    log: job.logPath,
+  };
+
+  const env: Record<string, string> =
+    runner.kind === "claude"
+      ? // Only the plan token. ANTHROPIC_API_KEY would replace the plan login.
+        { CLAUDE_CODE_OAUTH_TOKEN: runner.token, IS_SANDBOX: "1" }
+      : { LITELLM_API_KEY: need("LITELLM_API_KEY"), OPENCODE_DISABLE_FREE_MODELS: "1" };
+
+  const headBefore = git(["rev-parse", job.branch], job.worktree);
+  log(`== ${new Date().toISOString()} ${job.task} on ${label(runner)} from ${headBefore}`);
+
+  const sbx = await Sandbox.create({
+    template: "base",
+    ttl: "2h",
+    ...SIZE[job.tier],
+    env,
+    labels: { app: "bossman", task: job.task, tier: job.tier },
+  });
+  log(`sandbox ${sbx.id}`);
+
+  try {
+    await sbx.files.write("/root/task.bundle", readFileSync(job.bundle));
+    await sbx.files.write("/root/prompt.md", PROMPT + job.spec);
+    const setup = await sbx.exec(
+      `git clone -q -b ${job.branch} /root/task.bundle /root/repo && cd /root/repo && ` +
+        `git config user.name bossman && git config user.email bossman@localhost`,
+      { timeoutMs: 120_000 },
+    );
+    if (setup.exitCode !== 0) {
+      report.note = `couldn't unpack the repo in the sandbox: ${setup.stderr.trim().slice(-300)}`;
+      return report;
+    }
+
+    let cmd: string;
+    if (runner.kind === "claude") {
+      cmd = `cd /root/repo && claude -p --output-format json --permission-mode bypassPermissions < /root/prompt.md`;
+    } else {
+      await sbx.exec("mkdir -p /root/.config/opencode");
+      await sbx.files.write("/root/.config/opencode/opencode.jsonc", opencodeConfig());
+      cmd =
+        `cd /root/repo && opencode run --standalone --auto --format json --model ${runner.model} ` +
+        `--file /root/prompt.md "Do the task in the attached file."`;
+    }
+
+    let tail = "";
+    const keep = (s: string) => {
+      log(s);
+      tail = (tail + s).slice(-65_536);
+    };
+    const agent = await sbx.exec(cmd, { timeoutMs: AGENT_TIMEOUT_MS, onStdout: keep, onStderr: keep });
+    report.agentExit = agent.exitCode;
+    if (agent.timedOut) report.note = "the agent ran past its time limit and was stopped";
+
+    if (runner.kind === "claude" && agent.exitCode !== 0 && LIMIT_RE.test(tail)) {
+      report.outcome = "limit";
+      report.note = `${label(runner)} is at its usage limit`;
+      return report;
+    }
+
+    await sbx.exec(
+      `cd /root/repo && git add -A && (git diff --cached --quiet || git commit -q -m "${job.task}: uncommitted changes")`,
+    );
+
+    if (job.test) {
+      const t = await sbx.exec(`cd /root/repo && ${job.test}`, {
+        timeoutMs: TEST_TIMEOUT_MS,
+        onStdout: log,
+        onStderr: log,
+      });
+      report.tests = t.exitCode === 0 ? "pass" : "fail";
+    }
+
+    const count = await sbx.exec(`cd /root/repo && git rev-list --count ${headBefore}..HEAD`);
+    report.commits = Number(count.stdout.trim()) || 0;
+    if (report.commits > 0) {
+      await sbx.exec(`cd /root/repo && git format-patch -q --stdout ${headBefore}..HEAD > /root/out.patch`);
+      const patch = join(job.patchDir, `${job.task}-${Date.now()}.patch`);
+      writeFileSync(patch, await sbx.files.readBytes("/root/out.patch"));
+      if (!gitOk(["am", "-q", "--3way", patch], job.worktree)) {
+        gitOk(["am", "--abort"], job.worktree);
+        report.note = `the commits didn't apply to ${job.branch}. The patch is at ${patch}`;
+        return report;
+      }
+    }
+
+    const agentOk = agent.exitCode === 0 && !agent.timedOut;
+    report.outcome = agentOk && report.commits > 0 && report.tests !== "fail" ? "done" : "failed";
+    if (report.commits === 0 && !report.note) report.note = "the agent made no changes";
+    return report;
+  } finally {
+    await sbx.delete().catch((e) => log(`couldn't delete sandbox ${sbx.id}: ${e}`));
+  }
+}
+
+async function run(argv: string[]) {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      tier: { type: "string" },
+      task: { type: "string" },
+      spec: { type: "string" },
+      test: { type: "string" },
+      base: { type: "string", default: "HEAD" },
+      "allow-pro": { type: "boolean", default: false },
+    },
+  });
+  const tier = values.tier as Tier;
+  if (!["junior", "senior", "expert"].includes(tier)) fail("--tier must be junior, senior or expert.");
+  const task = values.task ?? fail("--task is missing, like --task T3.");
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(task)) fail("--task may only have letters, digits, dashes and underscores.");
+  const specPath = values.spec ?? fail("--spec is missing, like --spec specs/T3.md.");
+  need("PYO_URL");
+  need("PYO_API_KEY");
+
+  const root = git(["rev-parse", "--show-toplevel"], process.cwd());
+  const state = join(root, ".bossman");
+  for (const d of ["worktrees", "logs", "bundles", "patches"]) mkdirSync(join(state, d), { recursive: true });
+
+  const branch = `task/${task}`;
+  const worktree = join(state, "worktrees", task);
+  if (!gitOk(["rev-parse", "--verify", "--quiet", branch], root)) {
+    git(["worktree", "add", "-q", "-b", branch, worktree, values.base!], root);
+  } else if (!gitOk(["-C", worktree, "rev-parse"], root)) {
+    git(["worktree", "add", "-q", worktree, branch], root);
+  }
+
+  const bundle = join(state, "bundles", `${task}.bundle`);
+  git(["bundle", "create", "-q", bundle, branch], root);
+  if (statSync(bundle).size > MAX_UPLOAD) {
+    fail(`the repo is over 64 MiB as a git bundle, which is more than a sandbox upload takes.`);
+  }
+
+  const job: Job = {
+    task,
+    tier,
+    branch,
+    worktree,
+    bundle,
+    spec: readFileSync(resolve(root, specPath), "utf8"),
+    test: values.test,
+    logPath: join(state, "logs", `${task}.log`),
+    patchDir: join(state, "patches"),
+  };
+
+  let report: Report | undefined;
+  const allowPro = values["allow-pro"]! || process.env.BOSSMAN_ALLOW_PRO === "1";
+  for (const r of runners(tier, allowPro)) {
+    let release: (() => void) | null = () => {};
+    if (r.kind === "claude") {
+      release = await lock(r.account);
+      if (!release) continue; // busy for too long, try the next one
+    }
+    try {
+      report = await runOnce(job, r);
+    } finally {
+      release();
+    }
+    if (report.outcome !== "limit") break;
+  }
+
+  if (!report) fail("no runner was free. Try again later.");
+  console.log(JSON.stringify(report, null, 2));
+  process.exit(report.outcome === "done" ? 0 : 1);
+}
+
+const [cmd, ...rest] = process.argv.slice(2);
+if (cmd === "run") await run(rest);
+else fail(`unknown command "${cmd ?? ""}". Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>]`);
