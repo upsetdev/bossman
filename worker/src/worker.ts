@@ -9,12 +9,14 @@ import { parseArgs } from "node:util";
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { codexConfig } from "./codex";
 import { parseJsonc } from "./jsonc";
 
 type Tier = "junior" | "senior" | "expert";
 const TIERS: Tier[] = ["junior", "senior", "expert"];
 type Runner =
   | { kind: "opencode"; model: string }
+  | { kind: "codex"; alias: string }
   | { kind: "claude"; account: "max" | "pro"; token: string };
 
 const DEFAULT_TIERS: Record<Tier, string[]> = {
@@ -150,15 +152,26 @@ function tierRunners(root: string, tier: Tier, aliases: string[]): Runner[] {
       if (token) out.push({ kind: "claude", account, token });
       continue; // a plan without a token is skipped
     }
-    const litellm = /^litellm\/(.+)$/.exec(name);
+    const litellm = /^(codex:)?litellm\/(.+)$/.exec(name);
     if (litellm) {
-      if (!aliases.includes(litellm[1])) {
-        fail(`bossman.jsonc uses ${name}, but opencode.jsonc has no LiteLLM alias "${litellm[1]}".`);
+      const alias = litellm[2];
+      if (!aliases.includes(alias)) {
+        fail(`bossman.jsonc uses ${name}, but opencode.jsonc has no LiteLLM alias "${alias}".`);
       }
-      out.push({ kind: "opencode", model: name });
+      if (litellm[1]) {
+        if (!/^[A-Za-z0-9._-]+$/.test(alias)) {
+          fail(`the alias "${alias}" can't be used with Codex. Use letters, digits, dots, dashes and underscores.`);
+        }
+        out.push({ kind: "codex", alias });
+      } else {
+        out.push({ kind: "opencode", model: name });
+      }
       continue;
     }
-    fail(`bossman.jsonc has an unknown runner "${name}". Use litellm/<alias>, claude:max or claude:pro.`);
+    fail(
+      `bossman.jsonc has an unknown runner "${name}". ` +
+        `Use litellm/<alias>, codex:litellm/<alias>, claude:max or claude:pro.`,
+    );
   }
   if (out.length === 0) {
     fail(`no runner for ${tier} can run. Set ${TOKEN_VAR.max}, or add a litellm/<alias> to tiers.${tier}.`);
@@ -167,8 +180,12 @@ function tierRunners(root: string, tier: Tier, aliases: string[]): Runner[] {
 }
 
 function label(r: Runner): string {
-  return r.kind === "claude" ? `claude-${r.account}` : r.model;
+  if (r.kind === "claude") return `claude-${r.account}`;
+  if (r.kind === "codex") return `codex:litellm/${r.alias}`;
+  return r.model;
 }
+
+
 
 function opencodeConfig(provider: LitellmProvider): string {
   const base = need("LITELLM_BASE_URL").replace(/\/+$/, "");
@@ -246,6 +263,14 @@ async function runOnce(job: Job, runner: Runner): Promise<Report> {
     let cmd: string;
     if (runner.kind === "claude") {
       cmd = `cd /root/repo && claude -p --output-format json --permission-mode bypassPermissions < /root/prompt.md`;
+    } else if (runner.kind === "codex") {
+      await sbx.exec("mkdir -p /root/.codex");
+      await sbx.files.write("/root/.codex/config.toml", codexConfig(runner.alias, need("LITELLM_BASE_URL")));
+      // Piped stdin is added to the prompt as context. The sandbox is the isolation,
+      // so Codex runs without its own sandbox.
+      cmd =
+        `cd /root/repo && codex exec --json --ephemeral --sandbox danger-full-access ` +
+        `"Do the task described in the input." < /root/prompt.md`;
     } else {
       await sbx.exec("mkdir -p /root/.config/opencode");
       await sbx.files.write("/root/.config/opencode/opencode.jsonc", opencodeConfig(job.provider));
