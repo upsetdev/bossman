@@ -74,10 +74,29 @@ bossman "Build a todo app with a REST API and a React frontend"
 
 `bossman` runs `leader`, and resumes it if a run fails, up to 5 times. Progress is kept in `PLAN.md` and on the task branches, so a stopped run can pick up again.
 
-To run one task by hand:
+### Files bossman makes
+
+`leader` splits the work into numbered tasks. For task 3, that's:
+
+| File or branch | What it holds |
+| --- | --- |
+| `PLAN.md` | Every task with its number, tier, dependencies and status: todo, doing, done or failed |
+| `specs/3.md` | The task's instructions: the goal, the files to change and the test command. The worker gets nothing else |
+| `task/3` | The git branch the task's commits come back on. `leader` merges it after review and `worker check` pass |
+| `.bossman/` | Worktrees, logs, bundles and patches. It's in `.gitignore` |
+
+For example, `PLAN.md` might hold:
+
+```markdown
+1. senior · todo · Set up the API server and database schema
+2. junior · todo · Add the todo CRUD routes (needs 1)
+3. expert · todo · Add sign-in with sessions (needs 1)
+```
+
+`leader` normally runs each task for you. To run one by hand, for example task 3:
 
 ```sh
-worker run --tier senior --task T3 --spec specs/T3.md --test "bun test"
+worker run --tier senior --task 3 --spec specs/3.md --test "bun test"
 ```
 
 ## Tests
