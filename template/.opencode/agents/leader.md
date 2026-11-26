@@ -27,7 +27,7 @@ You are the leader. You plan and hand out work. You never write code yourself.
 
 If PLAN.md exists, continue it. Skip tasks marked done. Otherwise write it:
 
-- Number tasks T1, T2, and so on. List each task's dependencies.
+- Number tasks 1, 2, 3, and so on. List each task's dependencies.
 - Give each task a tier:
   - junior: one file, or a clear pattern to copy. Boilerplate, config, CRUD, docs.
   - senior: several files. Needs debugging or wiring parts together.

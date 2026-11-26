@@ -1,6 +1,6 @@
 // worker: runs one bossman task in a fresh Pyo sandbox and brings the commits back.
 //
-//   worker run --tier junior|senior|expert --task T3 --spec specs/T3.md [--test "bun test"]
+//   worker run --tier junior|senior|expert --task 3 --spec specs/3.md [--test "bun test"]
 //
 // Which runners a tier tries, and in what order, comes from bossman.jsonc in the repo.
 
@@ -357,9 +357,9 @@ async function run(argv: string[]) {
   });
   const tier = values.tier as Tier;
   if (!TIERS.includes(tier)) fail("--tier must be junior, senior or expert.");
-  const task = values.task ?? fail("--task is missing, like --task T3.");
+  const task = values.task ?? fail("--task is missing, like --task 3.");
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(task)) fail("--task may only have letters, digits, dashes and underscores.");
-  const specPath = values.spec ?? fail("--spec is missing, like --spec specs/T3.md.");
+  const specPath = values.spec ?? fail("--spec is missing, like --spec specs/3.md.");
   need("PYO_URL");
   need("PYO_API_KEY");
 
