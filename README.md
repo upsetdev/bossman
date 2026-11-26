@@ -162,6 +162,21 @@ Add `"compatibility": { "cacheFormat": "anthropic" }` to each alias that maps to
 
 `bossman task` moves to the next runner when a Claude plan is at its usage limit. Without a `bossman.jsonc`, it uses the tiers above.
 
+**Sandbox sizes.** Each task gets a fresh sandbox of its tier's size, and `bossman check` gets one of the `check` size:
+
+| Size | CPUs | Memory | Disk |
+| --- | --- | --- | --- |
+| `junior`, `senior`, `check` | 2 | 4 GiB | 8 GiB |
+| `expert` | 4 | 8 GiB | 16 GiB |
+
+Change any of them under `sizes` in `bossman.jsonc`, for a small sandbox server or a heavy build:
+
+```jsonc
+{ "sizes": { "expert": { "cpus": 2, "memoryMib": 2048 } } }
+```
+
+Values you leave out keep their default. Your team's sandbox limits in Pyo still apply, by default 16 CPUs and 16 GiB across all running sandboxes.
+
 **leader and reviewer** run on your machine. Set their models in `.opencode/agents/leader.md` and `reviewer.md`. Run `reviewer` on a different provider from the workers, so a second model family checks the code.
 
 ## Leader on ChatGPT
