@@ -83,6 +83,7 @@ Add `"compatibility": { "cacheFormat": "anthropic" }` to each alias that maps to
 | Runner | Runs |
 | --- | --- |
 | `litellm/<alias>` | OpenCode on that LiteLLM alias |
+| `codex:litellm/<alias>` | Codex on that LiteLLM alias, with your LiteLLM key. The alias must work with LiteLLM's Responses API (`/v1/responses`) |
 | `claude:max` | Claude Code on your Max plan. Skipped when `BOSSMAN_CLAUDE_MAX_TOKEN` isn't set |
 | `claude:pro` | Claude Code on your Pro plan. Skipped when `BOSSMAN_CLAUDE_PRO_TOKEN` isn't set |
 
@@ -102,7 +103,7 @@ Good to know:
 
 - These requests don't go through LiteLLM, so they don't count against its budgets or show in its spend logs.
 - OpenCode caps the context for ChatGPT sign-ins to match Codex.
-- Use it only on your own machine. OpenAI asks for API keys for scripted Codex use, so bossman doesn't use ChatGPT sign-in in sandboxes.
+- Use it only on your own machine. OpenAI asks for API keys for scripted Codex use, so bossman doesn't use ChatGPT sign-in in sandboxes. `codex:litellm/<alias>` runs Codex on your LiteLLM key instead.
 
 ## Claude plans
 

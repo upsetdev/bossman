@@ -21,3 +21,8 @@
 - `cacheFormat: "anthropic"` goes only on aliases that map to Claude models.
 - A ChatGPT plan may be used for `leader` on your own machine, through OpenCode's own sign-in. It's not used in sandboxes, since OpenAI asks for API keys for scripted Codex use.
 - A Codex runner is left for later.
+
+### Codex runner
+
+- Codex runs as `codex:litellm/<alias>`: on your LiteLLM key, never on a ChatGPT sign-in. OpenAI asks for API keys for scripted Codex use.
+- Codex runs with `--sandbox danger-full-access` and `approval_policy = "never"`. The Pyo sandbox is the isolation, as OpenAI's docs suggest for an isolated runner.
