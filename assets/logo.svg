@@ -1,3 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><style>.f{fill:#121212}.s{stroke:#121212}@media (prefers-color-scheme:dark){.f{fill:#f5f5f5}.s{stroke:#f5f5f5}}</style><mask id="m"><rect width="24" height="24" fill="#fff"/><circle cx="10.35" cy="6.75" r="1" fill="#000"/><circle cx="13.65" cy="6.75" r="1" fill="#000"/><polygon points="9.1,5.0 11.8,5.0 11.8,6.9 9.1,6.05" fill="#fff"/><polygon points="14.9,5.0 12.2,5.0 12.2,6.9 14.9,6.05" fill="#fff"/></mask>
-<g class="s" stroke-width="1.3" stroke-linejoin="round" fill="none"><path d="M12 10.9V17.6M4.2 19V13.2H19.6V17"/></g>
-<g class="f"><circle cx="12" cy="6.4" r="4.7" mask="url(#m)"/><circle cx="4.2" cy="20.6" r="1.9"/><circle cx="12" cy="19.95" r="2.55"/><circle cx="19.6" cy="19.3" r="3.2"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><style>.f{fill:#121212}@media (prefers-color-scheme:dark){.f{fill:#f5f5f5}}</style>
+<mask id="m"><rect width="24" height="24" fill="#fff"/>
+<ellipse cx="12" cy="13.4" rx="5" ry="6" fill="#000"/>
+<path d="M11.75 1.8H12.25L12.3 7.5H11.7Z" fill="#000"/>
+<rect x="8.1" y="9.8" width="3" height="0.75" rx="0.3" fill="#fff"/><rect x="12.9" y="9.8" width="3" height="0.75" rx="0.3" fill="#fff"/>
+<path d="M8.5 11.4H10.9A1.2 1.0 0 0 1 8.5 11.4Z" fill="#fff"/><path d="M13.1 11.4H15.5A1.2 1.0 0 0 1 13.1 11.4Z" fill="#fff"/>
+<path d="M11.5 12.1C11.4 12.9 11.3 13.5 11.6 13.8H12.4C12.7 13.5 12.6 12.9 12.5 12.1Z" fill="#fff"/>
+<path d="M12 14.4C10.8 13.8 9.2 14 8.5 15.1C8.1 15.7 8 16.5 8.2 17.1C8.5 16.4 9 16.1 9.6 16.1C10.5 16.1 11.4 15.8 12 15.3C12.6 15.8 13.5 16.1 14.4 16.1C15 16.1 15.5 16.4 15.8 17.1C16 16.5 15.9 15.7 15.5 15.1C14.8 14 13.2 13.8 12 14.4Z" fill="#fff"/>
+</mask>
+<path class="f" mask="url(#m)" d="M12 1.6C6.6 1.6 3.4 5.4 3.3 10.4C3.2 13.4 3.6 16 2.9 18.2C4.3 18.4 5.6 17.6 6.4 16.6C7 18.9 9.1 20.3 12 20.3C14.9 20.3 17 18.9 17.6 16.6C18.4 17.6 19.7 18.4 21.1 18.2C20.4 16 20.8 13.4 20.7 10.4C20.6 5.4 17.4 1.6 12 1.6Z"/>
+</svg>
