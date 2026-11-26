@@ -1,7 +1,7 @@
 #!/bin/sh
 # bossman: runs the leader agent on a prompt and resumes it after failures.
 #
-#   bossman init          add the agents and opencode.jsonc to this repo
+#   bossman init          add the agents, opencode.jsonc and bossman.jsonc to this repo
 #   bossman "<prompt>"    build it
 #
 # Set BOSSMAN_NOTIFY to a command that takes one message, to hear when a run
@@ -23,7 +23,7 @@ cd "$root" || exit 2
 
 if [ "${1:-}" = "init" ]; then
   mkdir -p .opencode/agents specs
-  for f in opencode.jsonc .opencode/agents/leader.md .opencode/agents/junior.md \
+  for f in opencode.jsonc bossman.jsonc .opencode/agents/leader.md .opencode/agents/junior.md \
            .opencode/agents/senior.md .opencode/agents/expert.md .opencode/agents/reviewer.md; do
     if [ -e "$f" ]; then say "kept your $f"; else cp "$here/../template/$f" "$f"; say "added $f"; fi
   done
