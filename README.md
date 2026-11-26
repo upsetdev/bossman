@@ -62,6 +62,31 @@ To run one task by hand:
 worker run --tier senior --task T3 --spec specs/T3.md --test "bun test"
 ```
 
+## Tests
+
+Set the full test command in `bossman.jsonc`:
+
+```jsonc
+{ "test": "bun install && bun test" }
+```
+
+Tests are checked at three points:
+
+| When | Who | What |
+| --- | --- | --- |
+| After each task | `worker run` | Runs the spec's test command in the task's sandbox. Falls back to `test` from `bossman.jsonc` |
+| After each task | `reviewer` | Reads the task's diff against its spec. It doesn't run anything |
+| After each merge | `worker check` | Runs `test` on the merged code in a fresh sandbox, with no agent and no keys. If it fails, `leader` reverts the merge and adds a task to fix it |
+
+For important code, `leader` first adds a task that writes the tests, on a different tier from the code task. Then one agent doesn't write both the code and the tests that grade it.
+
+To check a commit by hand:
+
+```sh
+worker check                 # HEAD
+worker check --ref main --test "pnpm test"
+```
+
 ## Models and providers
 
 **LiteLLM aliases.** Point `fast`, `balanced` and `premium` at any provider LiteLLM supports, like Gemini for `fast`, Claude for `balanced` and GPT for `premium`. Add more aliases in LiteLLM and list them under `providers.litellm.models` in `opencode.jsonc`. Sandboxes get the same block, so you set aliases in one place.
