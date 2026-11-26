@@ -1,0 +1,16 @@
+{
+  // Runners for each worker tier, tried in order. bossman moves to the next one
+  // when a Claude plan is at its usage limit, or when a plan's token isn't set.
+  //
+  //   litellm/<alias>  OpenCode on a LiteLLM alias from opencode.jsonc
+  //   claude:max       Claude Code on your Max plan. Needs BOSSMAN_CLAUDE_MAX_TOKEN
+  //   claude:pro       Claude Code on your Pro plan. Needs BOSSMAN_CLAUDE_PRO_TOKEN
+  //
+  // leader and reviewer run on your machine. Set their models in
+  // .opencode/agents/leader.md and reviewer.md.
+  "tiers": {
+    "junior": ["litellm/fast"],
+    "senior": ["litellm/balanced"],
+    "expert": ["claude:max", "litellm/premium"]
+  }
+}

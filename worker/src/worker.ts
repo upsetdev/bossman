@@ -1,17 +1,28 @@
 // worker: runs one bossman task in a fresh Pyo sandbox and brings the commits back.
 //
-//   worker run --tier junior|senior|expert --task T3 --spec specs/T3.md [--test "bun test"] [--allow-pro]
+//   worker run --tier junior|senior|expert --task T3 --spec specs/T3.md [--test "bun test"]
+//
+// Which runners a tier tries, and in what order, comes from bossman.jsonc in the repo.
 
 import { Sandbox } from "@pyodev/sandbox";
 import { parseArgs } from "node:util";
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { parseJsonc } from "./jsonc";
 
 type Tier = "junior" | "senior" | "expert";
+const TIERS: Tier[] = ["junior", "senior", "expert"];
 type Runner =
   | { kind: "opencode"; model: string }
   | { kind: "claude"; account: "max" | "pro"; token: string };
+
+const DEFAULT_TIERS: Record<Tier, string[]> = {
+  junior: ["litellm/fast"],
+  senior: ["litellm/balanced"],
+  expert: ["claude:max", "litellm/premium"],
+};
+const TOKEN_VAR = { max: "BOSSMAN_CLAUDE_MAX_TOKEN", pro: "BOSSMAN_CLAUDE_PRO_TOKEN" } as const;
 
 type Outcome = "done" | "failed" | "limit";
 
@@ -28,11 +39,6 @@ interface Report {
   note?: string;
 }
 
-const MODEL: Record<Tier, string> = {
-  junior: "litellm/fast",
-  senior: "litellm/balanced",
-  expert: "litellm/premium",
-};
 const SIZE: Record<Tier, { cpus: number; memoryMib: number; diskMib: number }> = {
   junior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
   senior: { cpus: 2, memoryMib: 4096, diskMib: 8192 },
@@ -96,40 +102,83 @@ async function lock(account: string): Promise<(() => void) | null> {
   return null;
 }
 
-function runners(tier: Tier, allowPro: boolean): Runner[] {
-  if (tier !== "expert") return [{ kind: "opencode", model: MODEL[tier] }];
-  const list: Runner[] = [];
-  const max = process.env.BOSSMAN_CLAUDE_MAX_TOKEN;
-  const pro = process.env.BOSSMAN_CLAUDE_PRO_TOKEN;
-  if (max) list.push({ kind: "claude", account: "max", token: max });
-  if (allowPro && pro) list.push({ kind: "claude", account: "pro", token: pro });
-  list.push({ kind: "opencode", model: MODEL.expert });
-  return list;
+function readJsonc(path: string): unknown {
+  try {
+    return parseJsonc(readFileSync(path, "utf8"));
+  } catch (e) {
+    fail(`couldn't read ${path}: ${(e as Error).message}`);
+  }
+}
+
+// The litellm provider block from the repo's opencode.jsonc. Sandboxes get the same aliases.
+interface LitellmProvider {
+  settings?: { baseURL?: string };
+  models?: Record<string, unknown>;
+  [k: string]: unknown;
+}
+
+function litellmProvider(root: string): LitellmProvider {
+  const path = ["opencode.jsonc", "opencode.json"].map((f) => join(root, f)).find(existsSync);
+  if (!path) fail("this repo has no opencode.jsonc. Run bossman init first.");
+  const cfg = readJsonc(path) as { providers?: { litellm?: LitellmProvider } };
+  const p = cfg.providers?.litellm;
+  if (!p?.models) fail(`${path} has no providers.litellm with models. See the template from bossman init.`);
+  return p;
+}
+
+// Tiers from bossman.jsonc, or the defaults when the repo has none.
+function tierRunners(root: string, tier: Tier, aliases: string[]): Runner[] {
+  const path = join(root, "bossman.jsonc");
+  let names = DEFAULT_TIERS[tier];
+  if (existsSync(path)) {
+    const cfg = readJsonc(path) as { tiers?: Partial<Record<Tier, unknown>> };
+    const list = cfg.tiers?.[tier];
+    if (list !== undefined) {
+      if (!Array.isArray(list) || list.length === 0 || !list.every((s) => typeof s === "string")) {
+        fail(`tiers.${tier} in bossman.jsonc must be a list of runners, like ["litellm/fast"].`);
+      }
+      names = list as string[];
+    }
+  }
+
+  const out: Runner[] = [];
+  for (const name of names) {
+    const claude = /^claude:(max|pro)$/.exec(name);
+    if (claude) {
+      const account = claude[1] as "max" | "pro";
+      const token = process.env[TOKEN_VAR[account]];
+      if (token) out.push({ kind: "claude", account, token });
+      continue; // a plan without a token is skipped
+    }
+    const litellm = /^litellm\/(.+)$/.exec(name);
+    if (litellm) {
+      if (!aliases.includes(litellm[1])) {
+        fail(`bossman.jsonc uses ${name}, but opencode.jsonc has no LiteLLM alias "${litellm[1]}".`);
+      }
+      out.push({ kind: "opencode", model: name });
+      continue;
+    }
+    fail(`bossman.jsonc has an unknown runner "${name}". Use litellm/<alias>, claude:max or claude:pro.`);
+  }
+  if (out.length === 0) {
+    fail(`no runner for ${tier} can run. Set ${TOKEN_VAR.max}, or add a litellm/<alias> to tiers.${tier}.`);
+  }
+  return out;
 }
 
 function label(r: Runner): string {
   return r.kind === "claude" ? `claude-${r.account}` : r.model;
 }
 
-function opencodeConfig(): string {
+function opencodeConfig(provider: LitellmProvider): string {
   const base = need("LITELLM_BASE_URL").replace(/\/+$/, "");
+  const baseURL = (provider.settings?.baseURL ?? "${LITELLM_BASE_URL}/v1").replaceAll("${LITELLM_BASE_URL}", base);
   return JSON.stringify(
     {
       $schema: "https://opencode.ai/config.json",
-      providers: {
-        litellm: {
-          name: "LiteLLM",
-          env: ["LITELLM_API_KEY"],
-          package: "@opencode/ai/providers/openai-compatible",
-          settings: { baseURL: `${base}/v1` },
-          models: {
-            fast: { compatibility: { cacheFormat: "anthropic" } },
-            balanced: { compatibility: { cacheFormat: "anthropic" } },
-            premium: { compatibility: { cacheFormat: "anthropic" } },
-          },
-        },
-      },
-      agents: { explore: { model: "litellm/fast" } },
+      providers: { litellm: { ...provider, settings: { ...provider.settings, baseURL } } },
+      // Searches go to the cheap alias when there is one. Otherwise explore uses the task's model.
+      ...(provider.models && "fast" in provider.models ? { agents: { explore: { model: "litellm/fast" } } } : {}),
     },
     null,
     2,
@@ -146,6 +195,7 @@ interface Job {
   test?: string;
   logPath: string;
   patchDir: string;
+  provider: LitellmProvider;
 }
 
 async function runOnce(job: Job, runner: Runner): Promise<Report> {
@@ -198,7 +248,7 @@ async function runOnce(job: Job, runner: Runner): Promise<Report> {
       cmd = `cd /root/repo && claude -p --output-format json --permission-mode bypassPermissions < /root/prompt.md`;
     } else {
       await sbx.exec("mkdir -p /root/.config/opencode");
-      await sbx.files.write("/root/.config/opencode/opencode.jsonc", opencodeConfig());
+      await sbx.files.write("/root/.config/opencode/opencode.jsonc", opencodeConfig(job.provider));
       cmd =
         `cd /root/repo && opencode run --standalone --auto --format json --model ${runner.model} ` +
         `--file /root/prompt.md "Do the task in the attached file."`;
@@ -263,11 +313,10 @@ async function run(argv: string[]) {
       spec: { type: "string" },
       test: { type: "string" },
       base: { type: "string", default: "HEAD" },
-      "allow-pro": { type: "boolean", default: false },
     },
   });
   const tier = values.tier as Tier;
-  if (!["junior", "senior", "expert"].includes(tier)) fail("--tier must be junior, senior or expert.");
+  if (!TIERS.includes(tier)) fail("--tier must be junior, senior or expert.");
   const task = values.task ?? fail("--task is missing, like --task T3.");
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(task)) fail("--task may only have letters, digits, dashes and underscores.");
   const specPath = values.spec ?? fail("--spec is missing, like --spec specs/T3.md.");
@@ -275,6 +324,8 @@ async function run(argv: string[]) {
   need("PYO_API_KEY");
 
   const root = git(["rev-parse", "--show-toplevel"], process.cwd());
+  const provider = litellmProvider(root);
+  const list = tierRunners(root, tier, Object.keys(provider.models!));
   const state = join(root, ".bossman");
   for (const d of ["worktrees", "logs", "bundles", "patches"]) mkdirSync(join(state, d), { recursive: true });
 
@@ -302,11 +353,11 @@ async function run(argv: string[]) {
     test: values.test,
     logPath: join(state, "logs", `${task}.log`),
     patchDir: join(state, "patches"),
+    provider,
   };
 
   let report: Report | undefined;
-  const allowPro = values["allow-pro"]! || process.env.BOSSMAN_ALLOW_PRO === "1";
-  for (const r of runners(tier, allowPro)) {
+  for (const r of list) {
     let release: (() => void) | null = () => {};
     if (r.kind === "claude") {
       release = await lock(r.account);
@@ -326,5 +377,9 @@ async function run(argv: string[]) {
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
-if (cmd === "run") await run(rest);
-else fail(`unknown command "${cmd ?? ""}". Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>]`);
+if (cmd === "run") {
+  await run(rest).catch((e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    fail(`couldn't run the task: ${msg}. Check PYO_URL, PYO_API_KEY and that a sandbox server is up.`);
+  });
+} else fail(`unknown command "${cmd ?? ""}". Use: worker run --tier <tier> --task <id> --spec <path> [--test <cmd>]`);

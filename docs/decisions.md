@@ -12,3 +12,12 @@
 - When Max is at its limit, `expert` falls back to `litellm/premium`. Pro is opt-in with `BOSSMAN_ALLOW_PRO=1`, since switching accounts to get around a usage limit is a gray area in Anthropic's terms.
 - Jev is not used. It is a hosted decision model, not an orchestrator, and it sends task text to an outside service.
 - Langfuse, Qdrant, Redis and secret managers are left out until there's a need.
+
+### Later the same day
+
+- Worker tiers are set in `bossman.jsonc` as ordered lists of runners: `litellm/<alias>`, `claude:max`, `claude:pro`. This replaces the fixed models in `worker`.
+- Pro is opt-in by listing `claude:pro` in `tiers.expert`. The default tiers don't list it. This replaces `BOSSMAN_ALLOW_PRO` and `--allow-pro`.
+- LiteLLM aliases are set once, in `providers.litellm` in the repo's `opencode.jsonc`. Sandboxes get a copy of that block.
+- `cacheFormat: "anthropic"` goes only on aliases that map to Claude models.
+- A ChatGPT plan may be used for `leader` on your own machine, through OpenCode's own sign-in. It's not used in sandboxes, since OpenAI asks for API keys for scripted Codex use.
+- A Codex runner is left for later.

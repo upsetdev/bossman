@@ -21,9 +21,9 @@ you ── bossman "<prompt>" ──► leader (OpenCode, your machine)
 2. Bundles that branch with `git bundle`.
 3. Creates a sandbox from `base` with only the env this tier needs.
 4. Uploads the bundle and the spec, then clones the bundle in the sandbox.
-5. Runs the agent:
-   - `junior` and `senior`: `opencode run` on `litellm/fast` or `litellm/balanced`
-   - `expert`: `claude -p` with the Max token. If Max is at its limit, `opencode run` on `litellm/premium`.
+5. Runs the agent with the first runner for its tier in `bossman.jsonc`:
+   - `litellm/<alias>`: `opencode run` on that alias, with the repo's `providers.litellm` block
+   - `claude:max` or `claude:pro`: `claude -p` with that plan's token. At the plan's usage limit, it tries the next runner.
 6. Commits anything left uncommitted, then runs the test command if one was given.
 7. Reads the new commits back with `git format-patch` and applies them to the worktree with `git am`.
 8. Deletes the sandbox and prints a short JSON report.
@@ -38,4 +38,5 @@ Check each of these against a real sandbox server before relying on it:
 - Whether OpenCode fills in `${LITELLM_BASE_URL}` inside `baseURL`. Its docs mention `${NAME}` placeholders there.
 - That `claude -p --permission-mode bypassPermissions` runs as root in a sandbox. `worker` sets `IS_SANDBOX=1` for it.
 - `@pyodev/sandbox` 0.4.0 on npm needs `template` and has no `name` option. The SDK's source has moved on since that release. Recheck after the next release.
+- That `opencode run --standalone`, which `bossman` uses, can see a ChatGPT sign-in saved by the normal OpenCode service.
 - That sandbox traffic leaves through the sandbox server's public address, so a LiteLLM firewall rule can allow only that address.
