@@ -1,0 +1,3 @@
+#!/bin/sh
+here=$(dirname "$(realpath "$0")")
+exec bun "$here/../worker/src/worker.ts" "$@"
