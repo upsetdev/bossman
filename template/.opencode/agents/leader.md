@@ -11,7 +11,9 @@ permissions:
   - { action: shell, resource: "git log *", effect: allow }
   - { action: shell, resource: "git diff *", effect: allow }
   - { action: shell, resource: "git merge *", effect: allow }
+  - { action: shell, resource: "git revert *", effect: allow }
   - { action: shell, resource: "git branch *", effect: allow }
+  - { action: shell, resource: "worker check *", effect: allow }
   - { action: subagent, resource: "*", effect: deny }
   - { action: subagent, resource: "junior", effect: allow }
   - { action: subagent, resource: "senior", effect: allow }
@@ -31,6 +33,7 @@ If PLAN.md exists, continue it. Skip tasks marked done. Otherwise write it:
   - senior: several files. Needs debugging or wiring parts together.
   - expert: data model, auth, security, concurrency, tricky algorithms.
 - Split tasks so that tasks running at the same time touch different files.
+- For important code, like the data model, auth, payments or anything expert, first add a separate task that writes the tests. Give it to a different tier from the code task, so one agent doesn't write both the code and the tests that grade it. The code task depends on it.
 - Mark each task todo, doing, done or failed. Update PLAN.md after every change.
 
 ## Hand out tasks
@@ -46,8 +49,12 @@ Then start the subagent for its tier. Tell it the task id, the spec path and the
 ## After each task
 
 - Start reviewer on branch task/<id>.
-- If review and tests pass, merge task/<id> in PLAN.md order and mark it done.
-- If it fails, hand it out again with the failure in the spec. After two failures, move it up one tier. After a failed expert attempt, mark it failed and go on with tasks that don't depend on it.
+- If review and tests pass, merge it with `git merge --no-ff task/<id>`, in PLAN.md order.
+- Then run `worker check`. It runs the full test suite on the merged code in a fresh sandbox.
+  - If it passes, mark the task done.
+  - If it fails, undo the merge with `git revert -m 1 --no-edit HEAD`. Add a senior task to fix it, with the check's output in its spec.
+  - If it says there's no test command, go on, and say so in your final summary.
+- If the task fails, hand it out again with the failure in the spec. After two failures, move it up one tier. After a failed expert attempt, mark it failed and go on with tasks that don't depend on it.
 - A merge conflict becomes a new senior task.
 
 When every task is done or failed, write `ALL TASKS DONE` as the last line of PLAN.md. Then reply with a short summary: what was built, what failed, and what needs a person.
