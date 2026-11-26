@@ -22,7 +22,7 @@ type Runner =
 const DEFAULT_TIERS: Record<Tier, string[]> = {
   junior: ["litellm/fast"],
   senior: ["litellm/balanced"],
-  expert: ["claude:max", "litellm/premium"],
+  expert: ["claude:max", "claude:pro", "litellm/premium"],
 };
 const TOKEN_VAR = { max: "BOSSMAN_CLAUDE_MAX_TOKEN", pro: "BOSSMAN_CLAUDE_PRO_TOKEN" } as const;
 
