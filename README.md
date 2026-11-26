@@ -70,3 +70,7 @@ When Max is at its usage limit, `expert` uses `litellm/premium`. It falls back t
 ## Status
 
 Early. See [docs/design.md](docs/design.md) for what's untested.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
